@@ -25,7 +25,7 @@ Jim's Render workspace hosts:
 - PostgreSQL: blueberry-owner-db, Ohio, private internal connection; external database traffic blocked.
 - Static /owner.html and /apply.html redirect to the Node service. These pages must not be copied into the static public directory, because existing static files take precedence over redirects.
 - Node build: `npm ci --include=dev && npm run build && npm run check && npm test`. Start: `npm start`.
-- `/healthz` performs a database query; verified healthy. The default Render health probe is currently TCP; HTTP health-check configuration remains an operations task.
+- `/healthz` performs a database query; verified healthy. Render is configured to use this HTTP health-check path.
 
 The repository is public at the owner's explicit request. Deployment is manual through Render; successful GitHub CI does not automatically deploy. GitHub Actions runs syntax checks, generated-page consistency, authentication/database tests and a reproducible build on main pushes and pull requests. It uses no production credentials.
 
