@@ -1,0 +1,5 @@
+const driveScene=document.querySelector('#driveScene'),motionToggle=document.querySelector('#motionToggle'),motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
+let motionPaused=motionPreference.matches;
+function syncMotion(){driveScene.classList.toggle('paused',motionPaused);driveScene.classList.toggle('motion-enabled',!motionPaused);motionToggle.setAttribute('aria-pressed',String(motionPaused));motionToggle.setAttribute('aria-label',motionPaused?'Play background animation':'Pause background animation');motionToggle.textContent=motionPaused?'▷ Play motion':'Ⅱ Pause motion'}
+motionToggle.addEventListener('click',()=>{motionPaused=!motionPaused;syncMotion()});motionPreference.addEventListener('change',e=>{motionPaused=e.matches;syncMotion()});syncMotion();
+let sceneVisible=true;function syncVisibility(){driveScene.classList.toggle('offscreen',!sceneVisible||document.hidden)}new IntersectionObserver(entries=>{sceneVisible=entries[0].isIntersecting;syncVisibility()},{threshold:0}).observe(driveScene);document.addEventListener('visibilitychange',syncVisibility);

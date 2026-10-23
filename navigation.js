@@ -1,0 +1,1 @@
+const menu=document.querySelector('.menu'),nav=document.querySelector('nav');menu.onclick=()=>{let open=nav.classList.toggle('open');menu.setAttribute('aria-expanded',open)};nav.querySelectorAll('a').forEach(a=>a.onclick=()=>{nav.classList.remove('open');menu.setAttribute('aria-expanded','false')});

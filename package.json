@@ -1,0 +1,10 @@
+{
+  "name": "blueberry-insurance",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node --check build.mjs && node --check coverage.js && node --check navigation.js && node --check quote-demo.js && node --check motion.js && node build.mjs --check"
+  }
+}
