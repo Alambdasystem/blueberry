@@ -2,9 +2,20 @@
   "name": "blueberry-insurance",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node build.mjs",
-    "check": "node --check build.mjs && node --check coverage.js && node --check navigation.js && node --check quote-demo.js && node --check motion.js && node build.mjs --check"
+    "check": "node --check build.mjs && node --check coverage.js && node --check navigation.js && node --check quote-demo.js && node --check motion.js && node build.mjs --check && node --check server.mjs && node --check auth.mjs && node --check owner.js && node --check apply.js",
+    "start": "node server.mjs",
+    "test": "node --test server.test.mjs",
+    "dev": "node preview.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11"
   }
 }

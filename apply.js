@@ -1,0 +1,9 @@
+const $=id=>document.getElementById(id);let submissionKey=crypto.randomUUID();let submittedPayload=null;
+const message=(text,ok=false)=>{$('formMessage').textContent=text;$('formMessage').className=ok?'success':'error';};
+async function api(path,options={}){const response=await fetch(path,{...options,signal:AbortSignal.timeout(15000)});let body;try{body=await response.json();}catch{throw new Error('The backend is not connected yet. Your request has not been saved.');}if(!response.ok)throw new Error(body.error||'Unable to save. Please try again.');return body;}
+$('requestForm').onsubmit=async e=>{e.preventDefault();$('submit').disabled=true;message('Saving your request…',true);try{
+ const payload={name:$('name').value,email:$('email').value,zip:$('zip').value,vehicle:$('vehicle').value,consent:$('consent').checked};
+ const signature=JSON.stringify(payload);if(submittedPayload!==null&&submittedPayload!==signature)submissionKey=crypto.randomUUID();submittedPayload=signature;
+ const result=await api('/api/applications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,submissionKey})});if(result.saved!==true)throw new Error('Save was not confirmed. Please try again.');$('requestForm').hidden=true;message(result.message,true);
+ }catch(e){message(e.name==='TimeoutError'?'The request timed out. Your entries are still here. Retry to confirm the save.':e.message);$('submit').disabled=false;}};
+(async()=>{try{const status=await api('/api/status');if(status.intakeEnabled){$('submit').disabled=false;}else{message('Requests are not being accepted yet. Please check back after setup is complete.');}}catch(e){message(e.message);}})();
