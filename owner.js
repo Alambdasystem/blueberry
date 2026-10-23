@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);let csrf='';
 const message=text=>{$('message').textContent=text;};
-async function api(path,options={}){const r=await fetch(path,{credentials:'same-origin',...options,signal:AbortSignal.timeout(15000)});let data;try{data=await r.json();}catch{throw new Error('The backend is not connected to this website yet.');}if(!r.ok)throw Object.assign(new Error(data.error||'Request failed.'),{status:r.status});return data;}
+async function api(path,options={}){let r;try{r=await fetch(path,{credentials:'same-origin',...options,signal:AbortSignal.timeout(15000)});}catch(e){throw new Error(e.name==='TimeoutError'?'The connection timed out. Please try again.':'Unable to connect. Check your connection and reload this page.');}let data;try{data=await r.json();}catch{throw new Error('The backend is not connected to this website yet.');}if(!r.ok)throw Object.assign(new Error(data.error||'Request failed.'),{status:r.status});return data;}
 function showLogin(){csrf='';$('dashboard').hidden=true;$('loginView').hidden=false;$('rows').replaceChildren();$('applicationCount').textContent='—';$('password').value='';$('code').value='';}
 async function loadApplications(){
  $('refresh').disabled=true;
@@ -13,4 +13,4 @@ $('loginForm').onsubmit=async e=>{e.preventDefault();$('loginButton').disabled=t
 $('logout').onclick=async()=>{try{await api('/api/owner/logout',{method:'POST',headers:{'X-CSRF-Token':csrf}});showLogin();message('Signed out.');}catch(e){if(e.status===401)showLogin();message(e.message);}};
 $('refresh').onclick=loadApplications;
 document.querySelectorAll('[data-panel]').forEach(button=>button.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-selected',String(b===button)));document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!==button.dataset.panel);});
-(async()=>{try{const status=await api('/api/status');if(!status.ownerConfigured){$('loginButton').disabled=true;message('Owner access has not been configured yet. Please contact the site administrator.');return;}await showDashboard();}catch(e){if(e.status!==401)message(e.message);}})();
+(async()=>{try{const status=await api('/api/status');if(!status.ownerConfigured){$('loginButton').disabled=true;message('Owner access has not been configured yet. Please contact the site administrator.');return;}$('loginButton').disabled=false;await showDashboard();}catch(e){if(e.status!==401)message(e.message);}})();

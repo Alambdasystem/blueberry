@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);let submissionKey=crypto.randomUUID();let submittedPayload=null;
 const message=(text,ok=false)=>{$('formMessage').textContent=text;$('formMessage').className=ok?'success':'error';};
-async function api(path,options={}){const response=await fetch(path,{...options,signal:AbortSignal.timeout(15000)});let body;try{body=await response.json();}catch{throw new Error('The backend is not connected yet. Your request has not been saved.');}if(!response.ok)throw new Error(body.error||'Unable to save. Please try again.');return body;}
+async function api(path,options={}){let response;try{response=await fetch(path,{...options,signal:AbortSignal.timeout(15000)});}catch(e){if(e.name==='TimeoutError')throw e;throw new Error('Unable to connect. Your entries are still here. Check your connection and try again.');}let body;try{body=await response.json();}catch{throw new Error('The backend is not connected yet. Your request has not been saved.');}if(!response.ok)throw new Error(body.error||'Unable to save. Please try again.');return body;}
 $('requestForm').onsubmit=async e=>{e.preventDefault();$('submit').disabled=true;message('Saving your request…',true);try{
  const payload={name:$('name').value,email:$('email').value,zip:$('zip').value,vehicle:$('vehicle').value,consent:$('consent').checked};
  const signature=JSON.stringify(payload);if(submittedPayload!==null&&submittedPayload!==signature)submissionKey=crypto.randomUUID();submittedPayload=signature;
