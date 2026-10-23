@@ -89,7 +89,9 @@ As the owner, I can track which leads need attention without confusing lead stat
 - Follow-up due date and filters make overdue leads visible; refreshed counts match saved states.
 - Notification delivery, if enabled, has verified recipient consent, retries and deduplication; no message is sent merely by viewing a lead.
 
-Status: not implemented; next development slice after request review. Requires versioned, backward-compatible schema migrations before status/audit schema changes.
+Status: implemented in the lead-workflow batch; authenticated production browser acceptance remains pending owner activation. API tests cover origin/CSRF/authentication, allowed transitions, closure validation, real date validation, concurrent revision conflicts, filtered counts and overdue handling. An injected audit-write failure verifies the lead update rolls back. UI-controller tests cover review/save/conflict and filter reset. Migration tests preserve a legacy request and verify repeatability. No email/SMS notification delivery is enabled.
+
+Allowed transitions: Received → Contacted or Closed; Contacted → Qualified or Closed; Qualified → Contacted or Closed; Closed → Received. Same-status edits can update scheduling. Closing requires a reason and clears follow-up; reopening clears the closure reason while retaining it in history. Overdue means before today's UTC calendar date. The application exposes read-only change history; it is not a tamper-proof external audit archive.
 
 ## A07 — Release safely with fewer deployments (BBI-007)
 
@@ -165,8 +167,12 @@ Status: not implemented; compensation agreement and statement/payment feed unava
 2. Run CI, then deploy the Node service once. No homepage deploy or production schema change is needed.
 3. Owner securely provisions password/TOTP; verify A03 live before opening intake.
 4. Resolve A04 notice/retention and A08 durable-storage gates, then run a synthetic request through A04–A05 and restart verification.
-5. Build A06 lead workflow with ordered migrations while partner onboarding for A09 proceeds separately.
+5. Validate A06 lead workflow in the authenticated production browser after enrollment; partner onboarding for A09 can proceed separately.
 
 ## Evidence boundaries
 
-Current local suite: 19 passing test results (15 backend cases plus their parent test, and 3 UI-controller cases). Controller tests use a minimal DOM harness, not a real browser. PGlite integration tests do not replace managed PostgreSQL/live acceptance. Production owner sign-in, real mobile testing, restore/rollback drills, actual carrier quoting, binding and commission payment remain unaccepted.
+Current local suite: 24 passing test results (17 backend cases plus their parent test, 1 legacy migration test, and 5 UI-controller cases). Controller tests use a minimal DOM harness, not a real browser. PGlite integration tests do not replace managed PostgreSQL/live acceptance. Production owner sign-in, real mobile testing, restore/rollback drills, actual carrier quoting, binding and commission payment remain unaccepted.
+
+## Lead-workflow release scope
+
+One backend deployment bundles A06 status/follow-up edits, status and overdue filters, revision conflict protection, read-only change history and migration 001. The unchanged static homepage needs no deployment. Schema changes preserve existing records; rollback to b0dae087af1f44a42bd269701a4c9d0e6210495b can leave the extra columns/history table in place, but removes workflow editing. Do not drop the added data during an application rollback. A production rollback drill remains pending.

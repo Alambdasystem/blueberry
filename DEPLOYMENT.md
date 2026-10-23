@@ -7,6 +7,7 @@
 - Server-side opaque sessions (30-minute expiry), HttpOnly/SameSite cookies, origin checks, CSRF-protected logout, database-backed rate limits and authenticator replay prevention.
 - Owner-only application listing, cursor-based pages of 25 records, older/newer navigation and total count.
 - Public contact requests with explicit consent, validation and duplicate-retry protection.
+- Owner follow-up workflow: status transitions, due dates, closure reasons, filters, optimistic revisions and atomic audit entries.
 - Empty quote/commission sections that do not fabricate carrier activity.
 
 This is contact-request intake, not a complete insurance application. No live quoting, policy binding, customer account, agent assignment, payment, commission integration or email delivery exists yet.
@@ -43,13 +44,13 @@ Set server environment:
 
 No default owner password or production test credential exists. Missing owner configuration fails closed. Do not send passwords, database URLs, or authenticator secrets through chat or commit them.
 
-The schema is created idempotently at startup for this first release. Future schema changes require ordered migrations and backward-compatible rollback. Production uses Postgres only; preview.mjs is local QA only and never used by npm start.
+Startup creates the original schema and applies numbered migration-001-lead-workflow.sql inside one transaction. schema_migrations records applied versions; its exclusive lock serializes migration application. New migrations must be appended in order, never replace an applied version. A failed startup migration fails the deployment. The first migration preserves existing leads and adds status choices, revisions, scheduling and history; rollback the application without dropping the added data. Production uses Postgres only; preview.mjs is local QA only and never used by npm start.
 
 ## Launch verification still required
 
 Managed Postgres connectivity and private-only database access have been verified. Still confirm backup configuration, owner authenticator enrollment, secure cookies, anonymous denial, a synthetic submitted request appearing after login, logout, and persistence across a real service restart. Remove test submissions through an approved administrative maintenance process. Review the contact notice, retention policy and support process before collecting real people’s data.
 
-Production owner login and submission flows have automated integration coverage but still need browser acceptance against the deployed service. MFA provisioning/recovery is administrator-assisted; role management, account recovery UI and an immutable audit history are later backlog items.
+Production owner login and submission flows have automated integration coverage but still need browser acceptance against the deployed service. MFA provisioning/recovery is administrator-assisted; role management, account recovery UI and a tamper-proof external audit archive are later backlog items. Lead changes now have an application-managed audit history.
 
 ## Batched release policy
 
@@ -58,3 +59,9 @@ Group completed stories into one tested commit/release. Run CI before deploying.
 Refresh resets request pagination to the newest page. Cursor timestamps retain PostgreSQL microsecond precision and use the record ID to break ties. New records arriving while paging are visible after Refresh. Counts reflect current records; pages are not a transactionally frozen report.
 
 See ACCEPTANCE.md for the full storyboard, production gates, and distinction between automated and live evidence.
+
+## Lead workflow release
+
+Apply migration 001 through normal Node startup; no separate database console command is needed. Versioned migration and update/audit atomicity have automated PGlite coverage. Managed PostgreSQL startup and health must still pass during deployment. Previous application b0dae087af1f44a42bd269701a4c9d0e6210495b tolerates added columns and statuses; rollback should retain the schema and all history. No rollback drill is claimed.
+
+After owner enrollment: open Applications, review a synthetic request, mark Contacted, schedule a date, verify overdue filtering, close with a reason and reopen. In a second browser tab, verify stale edits cannot overwrite a newer revision. Confirm the history, logout and reload. Intake stays disabled until the documented launch gates are complete.

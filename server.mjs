@@ -4,7 +4,10 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {digest,passwordMatches,matchingStep} from './auth.mjs';
 const root=new URL('.',import.meta.url);
-export async function migrate(db){await db.exec(await readFile(new URL('schema.sql',root),'utf8'));}
+export async function migrate(db){
+ const scripts=await Promise.all(['schema.sql','migration-001-lead-workflow.sql'].map(name=>readFile(new URL(name,root),'utf8')));
+ await db.exec('BEGIN;\n'+scripts.join('\n')+'\nCOMMIT;');
+}
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 async function jsonBody(req){
  if(!req.headers['content-type']?.startsWith('application/json'))throw fail(415,'Use JSON.');
@@ -67,8 +70,48 @@ export function createApp(db,config){
  if(req.headers['x-csrf-token']!==session.csrf)throw fail(403,'Invalid session request.');
  await db.query('DELETE FROM owner_sessions WHERE token_hash=$1',[digest(token)]);res.setHeader('Set-Cookie',cookie('',0));return send(200,{signedOut:true});
  }
+ const detail=path.match(/^\/api\/owner\/applications\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i);
+ if(detail&&req.method==='GET'){
+ const a=(await db.query('SELECT id,name,email,zip,vehicle,status,revision,follow_up_on::text,closure_reason,created_at FROM applications WHERE id=$1',[detail[1]])).rows[0];
+ if(!a)throw fail(404,'Request not found.');
+ const history=(await db.query('SELECT actor,created_at,previous_status,status,previous_follow_up_on::text,follow_up_on::text,previous_closure_reason,closure_reason,revision FROM application_events WHERE application_id=$1 ORDER BY revision DESC LIMIT 100',[detail[1]])).rows;
+ return send(200,{application:a,history});
+ }
+ if(detail&&req.method==='POST'){
+ if(req.headers['x-csrf-token']!==session.csrf)throw fail(403,'Invalid session request.');
+ const body=await jsonBody(req),states=['received','contacted','qualified','closed'];
+ if(!body||!states.includes(body.status)||!Number.isInteger(body.revision)||body.revision<1)throw fail(400,'Invalid status or revision.');
+ const due=body.followUpOn??null,reason=typeof body.closureReason==='string'?body.closureReason.trim():'';
+ if(due!==null&&(typeof due!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(due)||!Number.isFinite(Date.parse(due))||new Date(due).toISOString().slice(0,10)!==due))throw fail(400,'Choose a valid follow-up date.');
+ if(reason.length>500||(body.status==='closed'&&!reason)||(body.status==='closed'&&due!==null))throw fail(400,'Closed leads need a reason and cannot have a follow-up date.');
+ const current=(await db.query('SELECT status,revision FROM applications WHERE id=$1',[detail[1]])).rows[0];
+ if(!current)throw fail(404,'Request not found.');
+ const transitions={received:['contacted','closed'],contacted:['qualified','closed'],qualified:['contacted','closed'],closed:['received']};
+ if(current.revision!==body.revision)throw fail(409,'This request changed. Reopen it to review the latest version before saving.');
+ if(body.status!==current.status&&!transitions[current.status].includes(body.status))throw fail(400,'That status change is not allowed. Contact a received lead before qualifying it; reopen closed leads as Received.');
+ // One SQL statement atomically changes the version and records the previous/new values.
+ const result=await db.query(`WITH previous AS (
+ SELECT * FROM applications WHERE id=$1 AND revision=$2
+ ), updated AS (
+ UPDATE applications a SET status=$3,follow_up_on=$4::date,closure_reason=$5,revision=a.revision+1,updated_at=now()
+ FROM previous p WHERE a.id=p.id AND a.revision=$2
+ RETURNING a.id,a.revision,a.status,a.follow_up_on,a.closure_reason,p.status AS previous_status,p.follow_up_on AS previous_follow_up_on,p.closure_reason AS previous_closure_reason
+ ), logged AS (
+ INSERT INTO application_events(application_id,actor,previous_status,status,previous_follow_up_on,follow_up_on,previous_closure_reason,closure_reason,revision)
+ SELECT id,$6,previous_status,status,previous_follow_up_on,follow_up_on,previous_closure_reason,closure_reason,revision FROM updated RETURNING revision
+ ) SELECT revision FROM logged`,[detail[1],body.revision,body.status,due,body.status==='closed'?reason:null,config.ownerEmail]);
+ if(!result.rows.length)throw fail(409,'This request changed. Reopen it to review the latest version before saving.');
+ return send(200,{saved:true,revision:result.rows[0].revision});
+ }
  if(path==='/api/owner/applications'&&req.method==='GET'){
+ const params=new URL(req.url,'http://localhost').searchParams,filter=params.get('status')||'',overdue=params.get('overdue')||'';
+ if((filter&&!['received','contacted','qualified','closed'].includes(filter))||(overdue&&overdue!=='true'))throw fail(400,'Invalid application filter.');
+ const values=[],conditions=[];
+ if(filter){values.push(filter);conditions.push(`status=$${values.length}`);}
+ if(overdue)conditions.push("follow_up_on < (now() AT TIME ZONE 'UTC')::date AND status <> 'closed'");
+ const where=()=>conditions.length?'WHERE '+conditions.join(' AND '):'';
  const total=(await db.query('SELECT count(*)::integer AS total FROM applications')).rows[0].total;
+ const filteredTotal=(await db.query(`SELECT count(*)::integer AS total FROM applications ${where()}`,values)).rows[0].total;
  const cursor=new URL(req.url,'http://localhost').searchParams.get('cursor');
  let after=null;
  if(cursor!==null){
@@ -77,10 +120,11 @@ export function createApp(db,config){
  }catch{throw fail(400,'Invalid page. Use Refresh to return to the newest requests.');}
  }
  const limit=25;
- const result=(await db.query(`SELECT id,name,email,zip,vehicle,status,created_at,created_at::text AS cursor_time FROM applications ${after?'WHERE (created_at,id) < ($1::timestamptz,$2::uuid)':''} ORDER BY created_at DESC,id DESC LIMIT 26`,after||[])).rows;
+ if(after){values.push(...after);conditions.push(`(created_at,id) < ($${values.length-1}::timestamptz,$${values.length}::uuid)`);}
+ const result=(await db.query(`SELECT id,name,email,zip,vehicle,status,revision,follow_up_on::text,closure_reason,created_at,created_at::text AS cursor_time FROM applications ${where()} ORDER BY created_at DESC,id DESC LIMIT 26`,values)).rows;
  const rows=result.slice(0,limit),last=rows.at(-1);
  const nextCursor=result.length>limit?Buffer.from(JSON.stringify([last.cursor_time,last.id])).toString('base64url'):null;
- return send(200,{total,applications:rows.map(({cursor_time,...row})=>row),limit,nextCursor,carrierConnected:false,quotes:null,commissions:null});
+ return send(200,{total,filteredTotal,applications:rows.map(({cursor_time,...row})=>row),limit,nextCursor,carrierConnected:false,quotes:null,commissions:null});
  }
  throw fail(404,'Not found.');
  }
