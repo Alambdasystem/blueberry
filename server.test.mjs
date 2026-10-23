@@ -26,6 +26,20 @@ test('owner authentication, durable intake, authorization and recovery',async t=
  await t.test('password and MFA grant a protected session',async()=>{loginCode=totp(secret,Math.floor(Date.now()/30000));const r=await request('/api/owner/login',{email:config.ownerEmail,password:'test-only-password-not-a-deployed-credential',code:loginCode});assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/HttpOnly; SameSite=Strict/);cookie=r.headers.get('set-cookie').split(';')[0];csrf=(await r.json()).csrf;const data=await (await request('/api/owner/applications',undefined,{Cookie:cookie})).json();assert.equal(data.total,1);assert.equal(data.applications[0].email,input.email);assert.equal(data.quotes,null);assert.equal(data.commissions,null);});
  await t.test('authenticator codes cannot be replayed',async()=>{assert.equal((await request('/api/owner/login',{email:config.ownerEmail,password:'test-only-password-not-a-deployed-credential',code:loginCode})).status,401);});
  await t.test('database survives process-like reopen',async()=>{await stop();await db.close();db=new PGlite(folder);await migrate(db);app=createApp(db,config);await new Promise(r=>app.listen(0,'127.0.0.1',r));base=`http://127.0.0.1:${app.address().port}`;assert.equal((await (await request('/api/owner/applications',undefined,{Cookie:cookie})).json()).total,1);});
+ await t.test('pagination reaches every request with tied timestamps and new arrivals',async()=>{
+  const {randomUUID}=await import('node:crypto');
+  for(let i=0;i<105;i++)await db.query("INSERT INTO applications(id,submission_key,name,email,zip,vehicle,consent_version,created_at) VALUES($1,$2,'Paging fixture','paging@example.invalid','63101','Gas','test','2020-01-01 00:00:00.123456+00')",[randomUUID(),randomUUID()]);
+  const headers={Cookie:cookie};const first=await (await request('/api/owner/applications',undefined,headers)).json();
+  assert.equal(first.total,106);assert.equal(first.limit,25);assert.equal(first.applications.length,25);assert(first.nextCursor);
+  assert.equal((await request('/api/owner/applications?cursor='+first.nextCursor)).status,401);
+  await db.query("INSERT INTO applications(id,submission_key,name,email,zip,vehicle,consent_version) VALUES($1,$2,'New arrival','paging@example.invalid','63101','Gas','test')",[randomUUID(),randomUUID()]);
+  const seen=new Set(first.applications.map(a=>a.id));let cursor=first.nextCursor,pages=1;
+  while(cursor){assert(pages++<10);const r=await request('/api/owner/applications?cursor='+cursor,undefined,headers);assert.equal(r.status,200);const data=await r.json();for(const row of data.applications){assert(!seen.has(row.id));seen.add(row.id);}cursor=data.nextCursor;}
+  assert.equal(seen.size,106);assert.equal(pages,5);
+  const refreshed=await (await request('/api/owner/applications',undefined,headers)).json();assert.equal(refreshed.total,107);assert.equal(refreshed.applications[0].name,'New arrival');
+  for(const bad of ['not-a-cursor',Buffer.from(JSON.stringify(['oops','oops'])).toString('base64url'),'a'.repeat(257)])assert.equal((await request('/api/owner/applications?cursor='+bad,undefined,headers)).status,400);
+  await db.query("DELETE FROM applications WHERE email='paging@example.invalid'");
+ });
  await t.test('logout requires CSRF and revokes the session',async()=>{assert.equal((await request('/api/owner/logout',{}, {Cookie:cookie})).status,403);assert.equal((await request('/api/owner/logout',{}, {Cookie:cookie,'X-CSRF-Token':csrf})).status,200);assert.equal((await request('/api/owner/applications',undefined,{Cookie:cookie})).status,401);});
  await t.test('expired sessions rejected',async()=>{await db.query("INSERT INTO owner_sessions(token_hash,csrf,expires_at) VALUES($1,$2,now()-interval '1 second')",[digest('expired-test-token'),'csrf']);assert.equal((await request('/api/owner/session',undefined,{Cookie:'blueberry_owner=expired-test-token'})).status,401);});
  await t.test('login rate limit persists in database',async()=>{await db.query("UPDATE login_counters SET attempts=20 WHERE bucket='owner-login'");assert.equal((await request('/api/owner/login',{})).status,429);});

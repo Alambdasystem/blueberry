@@ -69,8 +69,18 @@ export function createApp(db,config){
  }
  if(path==='/api/owner/applications'&&req.method==='GET'){
  const total=(await db.query('SELECT count(*)::integer AS total FROM applications')).rows[0].total;
- const rows=(await db.query('SELECT id,name,email,zip,vehicle,status,created_at FROM applications ORDER BY created_at DESC,id DESC LIMIT 100')).rows;
- return send(200,{total,applications:rows,limit:100,carrierConnected:false,quotes:null,commissions:null});
+ const cursor=new URL(req.url,'http://localhost').searchParams.get('cursor');
+ let after=null;
+ if(cursor!==null){
+ try{if(cursor.length>256||!/^[A-Za-z0-9_-]+$/.test(cursor))throw Error();after=JSON.parse(Buffer.from(cursor,'base64url').toString());
+ if(!Array.isArray(after)||after.length!==2||typeof after[0]!=='string'||!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:\d{2})?)$/.test(after[0])||!Number.isFinite(Date.parse(after[0]))||typeof after[1]!=='string'||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(after[1]))throw Error();
+ }catch{throw fail(400,'Invalid page. Use Refresh to return to the newest requests.');}
+ }
+ const limit=25;
+ const result=(await db.query(`SELECT id,name,email,zip,vehicle,status,created_at,created_at::text AS cursor_time FROM applications ${after?'WHERE (created_at,id) < ($1::timestamptz,$2::uuid)':''} ORDER BY created_at DESC,id DESC LIMIT 26`,after||[])).rows;
+ const rows=result.slice(0,limit),last=rows.at(-1);
+ const nextCursor=result.length>limit?Buffer.from(JSON.stringify([last.cursor_time,last.id])).toString('base64url'):null;
+ return send(200,{total,applications:rows.map(({cursor_time,...row})=>row),limit,nextCursor,carrierConnected:false,quotes:null,commissions:null});
  }
  throw fail(404,'Not found.');
  }

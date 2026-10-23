@@ -5,7 +5,7 @@
 - Home page Owner Login and Request Information links.
 - Owner sign-in using email, a scrypt password hash, and a TOTP authenticator.
 - Server-side opaque sessions (30-minute expiry), HttpOnly/SameSite cookies, origin checks, CSRF-protected logout, database-backed rate limits and authenticator replay prevention.
-- Owner-only application listing, latest 100 records and total count.
+- Owner-only application listing, cursor-based pages of 25 records, older/newer navigation and total count.
 - Public contact requests with explicit consent, validation and duplicate-retry protection.
 - Empty quote/commission sections that do not fabricate carrier activity.
 
@@ -50,3 +50,11 @@ The schema is created idempotently at startup for this first release. Future sch
 Managed Postgres connectivity and private-only database access have been verified. Still confirm backup configuration, owner authenticator enrollment, secure cookies, anonymous denial, a synthetic submitted request appearing after login, logout, and persistence across a real service restart. Remove test submissions through an approved administrative maintenance process. Review the contact notice, retention policy and support process before collecting real people’s data.
 
 Production owner login and submission flows have automated integration coverage but still need browser acceptance against the deployed service. MFA provisioning/recovery is administrator-assisted; role management, account recovery UI and an immutable audit history are later backlog items.
+
+## Batched release policy
+
+Group completed stories into one tested commit/release. Run CI before deploying. Documentation-only changes need no deployment. This owner-pagination release affects only the Node service; do not redeploy the unchanged static homepage. Record the deployed commit and deploy ID after verification. No schema change is included; rollback to 973954928586a278036c74e5d801423e03dc0417 remains schema-compatible but has not been rehearsed.
+
+Refresh resets request pagination to the newest page. Cursor timestamps retain PostgreSQL microsecond precision and use the record ID to break ties. New records arriving while paging are visible after Refresh. Counts reflect current records; pages are not a transactionally frozen report.
+
+See ACCEPTANCE.md for the full storyboard, production gates, and distinction between automated and live evidence.
