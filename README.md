@@ -25,15 +25,17 @@ Scripts currently retain their original execution order and classic-script scope
 
 ## Hosting
 
-The new owner workspace requires the Node web service and PostgreSQL configuration in DEPLOYMENT.md. The previous static site's index-only copy command is insufficient for this release. Production activation is not complete until that hosting change and owner setup are verified.
+The static homepage and Node/PostgreSQL owner service are deployed in Jim's Render workspace. Owner and request links redirect to the backend. Owner activation is still required; see DEPLOYMENT.md.
 
 ## Current work
 
-BBI-006: source separation implemented in commit 8438d67. Build and syntax checks pass. Generated output is byte-for-byte identical to the baseline demo, so markup, styles, animation, and quote behavior are preserved. No new automated behavior tests were added for this extraction.
+- BBI-006 source separation: complete.
+- BBI-007 CI: push/PR workflow added and first GitHub run passed. Manual Render deployment verified; automatic deployment, rollback drill and branch protection remain pending.
+- Latest functional release: 9143708, deployed to both Render services. Quote Back navigation/focus and owner readiness issues fixed and checked live.
+- Owner production activation: credentials and MFA enrollment pending. Intake remains disabled.
+- Live carrier quotes, binding, policy tracking and commission feeds: not connected.
 
-BBI-007: next engineering story — connect private GitHub access, run checks on changes, and establish a verified Render deployment/rollback path.
-
-Business dependencies BBI-001 through BBI-005 remain open. Real quotes and revenue depend on licensed distribution and a confirmed partner agreement.
+See [ACCEPTANCE.md](ACCEPTANCE.md) for story acceptance and test boundaries, and [DEPLOYMENT.md](DEPLOYMENT.md) for the live hosting configuration.
 
 ## Owner workspace increment
 

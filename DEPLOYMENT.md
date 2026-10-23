@@ -16,13 +16,20 @@ This is contact-request intake, not a complete insurance application. No live qu
 Use Node 24. Run `npm ci`, `npm run build`, `npm run check`, `npm test`.
 Tests use an embedded PostgreSQL engine (PGlite), including database close/reopen persistence. These are not evidence of a successful managed Render Postgres deployment.
 
-## Required hosting change
+## Live hosting (verified October 23, 2026)
 
-The current Render service is STATIC and copies only index.html. It cannot run this backend or serve the new owner/application pages under that old copy command.
+Jim's Render workspace hosts:
 
-Deploy the repository as a Node WEB SERVICE with a PostgreSQL database, in the same Render region. Build: `npm ci --include=dev && npm run build && npm run check && npm test`. Start: `npm start`. Health path: `/healthz`.
+- Static homepage: https://blueberry-insurance.onrender.com
+- Node web service: https://blueberry-owner-workspace.onrender.com
+- PostgreSQL: blueberry-owner-db, Ohio, private internal connection; external database traffic blocked.
+- Static /owner.html and /apply.html redirect to the Node service. These pages must not be copied into the static public directory, because existing static files take precedence over redirects.
+- Node build: `npm ci --include=dev && npm run build && npm run check && npm test`. Start: `npm start`.
+- `/healthz` performs a database query; verified healthy. The default Render health probe is currently TCP; HTTP health-check configuration remains an operations task.
 
-Private repository Git credentials must be linked in the intended Jim Hill Render workspace. Do not make the repository public as a workaround. This release does not claim that deployment is complete or automatic.
+The repository is public at the owner's explicit request. Deployment is manual through Render; successful GitHub CI does not automatically deploy. GitHub Actions runs syntax checks, generated-page consistency, authentication/database tests and a reproducible build on main pushes and pull requests. It uses no production credentials.
+
+The free PostgreSQL instance expires November 22, 2026. Upgrade and establish a backup/restore procedure before relying on it for customer records.
 
 Set server environment:
 
@@ -40,6 +47,6 @@ The schema is created idempotently at startup for this first release. Future sch
 
 ## Launch verification still required
 
-Confirm managed Postgres connectivity, private network and backup configuration, owner authenticator enrollment, secure cookies, anonymous denial, a synthetic submitted request appearing after login, logout, and persistence across a real service restart. Remove test submissions through an approved administrative maintenance process. Review the contact notice, retention policy and support process before collecting real people’s data.
+Managed Postgres connectivity and private-only database access have been verified. Still confirm backup configuration, owner authenticator enrollment, secure cookies, anonymous denial, a synthetic submitted request appearing after login, logout, and persistence across a real service restart. Remove test submissions through an approved administrative maintenance process. Review the contact notice, retention policy and support process before collecting real people’s data.
 
 Production owner login and submission flows have automated integration coverage but still need browser acceptance against the deployed service. MFA provisioning/recovery is administrator-assisted; role management, account recovery UI and an immutable audit history are later backlog items.
